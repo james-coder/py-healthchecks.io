@@ -32,51 +32,25 @@ def test_get_ping_url(test_abstract_client):
 
 
 check_response_parameters = [
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=401, request=Request("get", "http://test")),
-        HCAPIAuthError,
-    ),
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=500, request=Request("get", "http://test")),
-        HCAPIError,
-    ),
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=429, request=Request("get", "http://test")),
-        HCAPIRateLimitError,
-    ),
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=404, request=Request("get", "http://test")),
-        CheckNotFoundError,
-    ),
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=400, request=Request("get", "http://test")),
-        BadAPIRequestError,
-    ),
+    (Response(status_code=401, request=Request("get", "http://test")), HCAPIAuthError),
+    (Response(status_code=500, request=Request("get", "http://test")), HCAPIError),
+    (Response(status_code=429, request=Request("get", "http://test")), HCAPIRateLimitError),
+    (Response(status_code=404, request=Request("get", "http://test")), CheckNotFoundError),
+    (Response(status_code=400, request=Request("get", "http://test")), BadAPIRequestError),
 ]
 
 
-@pytest.mark.parametrize("test_client, response, exception", check_response_parameters)
-def test_check_resposne(test_client, response, exception):
+@pytest.mark.parametrize("response, exception", check_response_parameters)
+def test_check_resposne(test_abstract_client, response, exception):
     with pytest.raises(exception):
-        test_client.check_response(response)
+        test_abstract_client.check_response(response)
 
 
 ping_response_parameters = deepcopy(check_response_parameters)
-ping_response_parameters.append(
-    (
-        pytest.lazy_fixture("test_abstract_client"),
-        Response(status_code=409, request=Request("get", "http://test")),
-        NonUniqueSlugError,
-    )
-)
+ping_response_parameters.append((Response(status_code=409, request=Request("get", "http://test")), NonUniqueSlugError))
 
 
-@pytest.mark.parametrize("test_client, response, exception", ping_response_parameters)
-def test_check_ping_resposne(test_client, response, exception):
+@pytest.mark.parametrize("response, exception", ping_response_parameters)
+def test_check_ping_resposne(test_abstract_client, response, exception):
     with pytest.raises(exception):
-        test_client.check_ping_response(response)
+        test_abstract_client.check_ping_response(response)
