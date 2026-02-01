@@ -31,12 +31,12 @@ async def test_acreate_check_200_context_manager(fake_check_api_result, respx_mo
                 "next_ping": None,
                 "manual_resume": False,
                 "methods": "",
-                "pause_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
+                "pause_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
                 "ping_url": "https://hc-ping.com/f618072a-7bde-4eee-af63-71a77c5723bc",
                 "status": "new",
                 "tags": "prod www",
                 "timeout": 3600,
-                "update_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
+                "update_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
             },
         )
     )
@@ -63,12 +63,12 @@ async def test_acreate_check_200(fake_check_api_result, respx_mock, test_async_c
                 "next_ping": None,
                 "manual_resume": False,
                 "methods": "",
-                "pause_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
+                "pause_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
                 "ping_url": "https://hc-ping.com/f618072a-7bde-4eee-af63-71a77c5723bc",
                 "status": "new",
                 "tags": "prod www",
                 "timeout": 3600,
-                "update_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
+                "update_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
             },
         )
     )
@@ -94,12 +94,12 @@ async def test_aupdate_check_200(fake_check_api_result, respx_mock, test_async_c
                 "next_ping": None,
                 "manual_resume": False,
                 "methods": "",
-                "pause_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
+                "pause_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc/pause",
                 "ping_url": "https://hc-ping.com/f618072a-7bde-4eee-af63-71a77c5723bc",
                 "status": "new",
                 "tags": "prod www",
                 "timeout": 3600,
-                "update_url": "https://healthchecks.io/api/v1/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
+                "update_url": "https://healthchecks.io/api/v3/checks/f618072a-7bde-4eee-af63-71a77c5723bc",
             },
         )
     )
@@ -157,6 +157,16 @@ async def test_aget_checks_tags(fake_check_api_result, respx_mock, test_async_cl
     assert checks[0].name == fake_check_api_result["name"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_aget_checks_slug(fake_check_api_result, respx_mock, test_async_client):
+    checks_url = urljoin(test_async_client._api_url, "checks/?slug=test-slug")
+    respx_mock.get(checks_url).mock(return_value=Response(status_code=200, json={"checks": [fake_check_api_result]}))
+    checks = await test_async_client.get_checks(slug="test-slug")
+    assert len(checks) == 1
+    assert checks[0].name == fake_check_api_result["name"]
+
+
 def test_finalizer_closes(test_async_client):
     """Tests our finalizer works to close the method"""
     assert not test_async_client.is_closed
@@ -205,6 +215,15 @@ async def test_acheck_pause_404(respx_mock, test_async_client):
 
 @pytest.mark.asyncio
 @pytest.mark.respx
+async def test_resume_check_200(fake_check_api_result, respx_mock, test_async_client):
+    checks_url = urljoin(test_async_client._api_url, "checks/test/resume")
+    respx_mock.post(checks_url).mock(return_value=Response(status_code=200, json=fake_check_api_result))
+    check = await test_async_client.resume_check(check_id="test")
+    assert check.name == fake_check_api_result["name"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx
 async def test_adelete_check_200(fake_check_api_result, respx_mock, test_async_client):
     assert test_async_client._client is not None
     checks_url = urljoin(test_async_client._api_url, "checks/test")
@@ -230,6 +249,15 @@ async def test_aget_check_pings_200(fake_check_pings_api_result, respx_mock, tes
     pings = await test_async_client.get_check_pings("test")
     assert len(pings) == len(fake_check_pings_api_result)
     assert pings[0].type == fake_check_pings_api_result[0]["type"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_aget_check_ping_body_200(respx_mock, test_async_client):
+    checks_url = urljoin(test_async_client._api_url, "checks/test/pings/3/body")
+    respx_mock.get(checks_url).mock(return_value=Response(status_code=200, text="payload"))
+    body = await test_async_client.get_check_ping_body("test", 3)
+    assert body == "payload"
 
 
 @pytest.mark.asyncio
@@ -280,6 +308,15 @@ async def test_aget_badges(fake_badges_api_result, respx_mock, test_async_client
     assert integrations.keys() == fake_badges_api_result["badges"].keys()
 
 
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_aget_status(respx_mock, test_async_client):
+    status_url = urljoin(test_async_client._api_url, "status/")
+    respx_mock.get(status_url).mock(return_value=Response(status_code=200, json={"status": "ok"}))
+    status = await test_async_client.get_status()
+    assert status["status"] == "ok"
+
+
 ping_test_parameters = [
     ("test", "success_ping", {"uuid": "test"}),
     ("1234/test", "success_ping", {"slug": "test"}),
@@ -302,3 +339,23 @@ async def test_asuccess_ping(respx_mock, test_async_client, url, ping_method, me
     result = await ping_method(**method_kwargs)
     assert result[0] is True
     assert result[1] == "OK"
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_asuccess_ping_with_params(respx_mock, test_async_client):
+    channels_url = urljoin(test_async_client._ping_url, "test")
+    respx_mock.post(f"{channels_url}?create=1&rid=run123").mock(return_value=Response(status_code=200, text="OK"))
+    result, text = await test_async_client.success_ping(uuid="test", create=True, rid="run123")
+    assert result is True
+    assert text == "OK"
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_alog_ping(respx_mock, test_async_client):
+    channels_url = urljoin(test_async_client._ping_url, "test/log")
+    respx_mock.post(channels_url).mock(return_value=Response(status_code=200, text="OK"))
+    result, text = await test_async_client.log_ping(uuid="test", data="log line")
+    assert result is True
+    assert text == "OK"

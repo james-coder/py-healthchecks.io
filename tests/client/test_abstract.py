@@ -46,6 +46,12 @@ def test_check_resposne(test_abstract_client, response, exception):
         test_abstract_client.check_response(response)
 
 
+def test_check_response_conflict(test_abstract_client):
+    response = Response(status_code=409, request=Request("get", "http://test"))
+    with pytest.raises(BadAPIRequestError):
+        test_abstract_client.check_response(response)
+
+
 ping_response_parameters = deepcopy(check_response_parameters)
 ping_response_parameters.append((Response(status_code=409, request=Request("get", "http://test")), NonUniqueSlugError))
 

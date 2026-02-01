@@ -52,6 +52,27 @@ def test_check_create_validators():
         check_create = checks.CheckCreate(name="Test", tags="", desc="Test", unique=["no good"])
 
 
+def test_check_create_schedule_oncalendar():
+    check_create = checks.CheckCreate(name="Test", schedule="daily")
+    assert check_create.schedule == "daily"
+
+
+def test_check_create_slug_validation():
+    check_create = checks.CheckCreate(slug="valid-slug_1")
+    assert check_create.slug == "valid-slug_1"
+
+    with pytest.raises(ValidationError):
+        checks.CheckCreate(slug="Invalid Slug")
+
+    with pytest.raises(ValidationError):
+        checks.CheckCreate(slug="UpperCase")
+
+
+def test_check_create_unique_allows_slug():
+    check_create = checks.CheckCreate(unique=["slug"])
+    assert check_create.unique == ["slug"]
+
+
 def test_check_create_allows_none_optionals():
     check_create = checks.CheckCreate(schedule=None, tz=None, methods=None, unique=None)
     assert check_create.schedule is None
@@ -77,8 +98,12 @@ def test_check_pings_from_api():
         "remote_addr": "192.0.2.0",
         "method": "GET",
         "ua": "curl/7.68.0",
+        "rid": "123",
+        "body_url": "https://example.com/body",
         "duration": 2.896736,
     }
     this_ping = checks.CheckPings.from_api_result(ping)
     assert this_ping.type == ping["type"]
     assert this_ping.duration == ping["duration"]
+    assert this_ping.rid == "123"
+    assert this_ping.body_url == "https://example.com/body"

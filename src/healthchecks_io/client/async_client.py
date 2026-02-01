@@ -29,7 +29,7 @@ class AsyncClient(AbstractClient):
         ping_key: str = "",
         api_url: str = "https://healthchecks.io/api/",
         ping_url: str = "https://hc-ping.com/",
-        api_version: int = 1,
+        api_version: int = 3,
         client: Optional[HTTPXAsyncClient] = None,
     ) -> None:
         """An AsyncClient can be used in code using asyncio to work with the Healthchecks.io api.
@@ -39,7 +39,7 @@ class AsyncClient(AbstractClient):
             ping_key (str): Healthchecks.io Ping key. Defaults to an empty string.
             api_url (str): API URL. Defaults to "https://healthchecks.io/api/".
             ping_url (str): Ping API url. Defaults to "https://hc-ping.com/"
-            api_version (int): Versiopn of the api to use. Defaults to 1.
+            api_version (int): Version of the api to use. Defaults to 3.
             client (Optional[HTTPXAsyncClient], optional): A httpx.Asyncclient. If not
                 passed in, one will be created for this object. Defaults to None.
         """
@@ -145,12 +145,13 @@ class AsyncClient(AbstractClient):
         )
         return Check.from_api_result(response.json())
 
-    async def get_checks(self, tags: Optional[List[str]] = None) -> List[Check]:
+    async def get_checks(self, tags: Optional[List[str]] = None, slug: Optional[str] = None) -> List[Check]:
         """Get a list of checks from the healthchecks api.
 
         Args:
             tags (Optional[List[str]], optional): Filters the checks and returns only
                 the checks that are tagged with the specified value. Defaults to None.
+            slug (Optional[str], optional): Filters the checks by slug. Defaults to None.
 
         Raises:
             HCAPIAuthError: When the API returns a 401, indicates an api key issue
@@ -165,6 +166,8 @@ class AsyncClient(AbstractClient):
         if tags is not None:
             for tag in tags:
                 request_url = self._add_url_params(request_url, {"tag": tag}, replace=False)
+        if slug is not None:
+            request_url = self._add_url_params(request_url, {"slug": slug})
 
         response = self.check_response(await self._client.get(request_url))
 
@@ -218,6 +221,29 @@ class AsyncClient(AbstractClient):
         response = self.check_response(await self._client.post(request_url, data={}))
         return Check.from_api_result(response.json())
 
+    async def resume_check(self, check_id: str) -> Check:
+        """Resumes monitoring for a paused check.
+
+        check_id must be a uuid, not a unique id
+
+        Args:
+            check_id (str): check's uuid
+
+        Returns:
+            Check: the check just resumed
+
+        Raises:
+            HCAPIAuthError: Raised when status_code == 401 or 403
+            HCAPIError: Raised when status_code is 5xx
+            CheckNotFoundError: Raised when status_code is 404
+            BadAPIRequestError: Raised when status_code is 409 (check not paused)
+            HCAPIRateLimitError: Raised when status code is 429
+
+        """
+        request_url = self._get_api_request_url(f"checks/{check_id}/resume")
+        response = self.check_response(await self._client.post(request_url, data={}))
+        return Check.from_api_result(response.json())
+
     async def delete_check(self, check_id: str) -> Check:
         """Permanently deletes the check from the user's account.
 
@@ -264,6 +290,27 @@ class AsyncClient(AbstractClient):
         request_url = self._get_api_request_url(f"checks/{check_id}/pings/")
         response = self.check_response(await self._client.get(request_url))
         return [CheckPings.from_api_result(check_data) for check_data in response.json()["pings"]]
+
+    async def get_check_ping_body(self, check_id: str, ping_n: int) -> str:
+        """Returns the HTTP request body for a specific ping.
+
+        Args:
+            check_id (str): check's uuid
+            ping_n (int): ping number to fetch
+
+        Returns:
+            str: request body of the ping
+
+        Raises:
+            HCAPIAuthError: Raised when status_code == 401 or 403
+            HCAPIError: Raised when status_code is 5xx
+            CheckNotFoundError: Raised when status_code is 404
+            BadAPIRequestError: Raised when status_code is 400
+            HCAPIRateLimitError: Raised when status code is 429
+        """
+        request_url = self._get_api_request_url(f"checks/{check_id}/pings/{ping_n}/body")
+        response = self.check_response(await self._client.get(request_url))
+        return response.text
 
     async def get_check_flips(
         self,
@@ -352,7 +399,24 @@ class AsyncClient(AbstractClient):
         response = self.check_response(await self._client.get(request_url))
         return {key: Badges.from_api_result(item) for key, item in response.json()["badges"].items()}
 
-    async def success_ping(self, uuid: str = "", slug: str = "", data: str = "") -> Tuple[bool, str]:
+    async def get_status(self) -> Dict[str, str]:
+        """Returns Healthchecks.io API status information.
+
+        Returns:
+            Dict[str, str]: status information
+        """
+        request_url = self._get_api_request_url("status/")
+        response = self.check_response(await self._client.get(request_url))
+        return response.json()
+
+    async def success_ping(
+        self,
+        uuid: str = "",
+        slug: str = "",
+        data: str = "",
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
         """Signals to Healthchecks.io that a job has completed successfully.
 
         Can also be used to indicate a continuously running process is still running and healthy.
@@ -382,11 +446,18 @@ class AsyncClient(AbstractClient):
         Returns:
             Tuple[bool, str]: success (true or false) and the response text
         """
-        ping_url = self._get_ping_url(uuid, slug, "")
+        ping_url = self._get_ping_url_with_params(uuid, slug, "", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
         return (True if response.status_code == 200 else False, response.text)
 
-    async def start_ping(self, uuid: str = "", slug: str = "", data: str = "") -> Tuple[bool, str]:
+    async def start_ping(
+        self,
+        uuid: str = "",
+        slug: str = "",
+        data: str = "",
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
         """Sends a "job has started!" message to Healthchecks.io.
 
         Sending a "start" signal is optional, but it enables a few extra features:
@@ -418,11 +489,18 @@ class AsyncClient(AbstractClient):
         Returns:
             Tuple[bool, str]: success (true or false) and the response text
         """
-        ping_url = self._get_ping_url(uuid, slug, "/start")
+        ping_url = self._get_ping_url_with_params(uuid, slug, "/start", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
         return (True if response.status_code == 200 else False, response.text)
 
-    async def fail_ping(self, uuid: str = "", slug: str = "", data: str = "") -> Tuple[bool, str]:
+    async def fail_ping(
+        self,
+        uuid: str = "",
+        slug: str = "",
+        data: str = "",
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
         """Signals to Healthchecks.io that the job has failed.
 
         Actively signaling a failure minimizes the delay from your monitored service failing to you receiving an alert.
@@ -452,11 +530,19 @@ class AsyncClient(AbstractClient):
         Returns:
             Tuple[bool, str]: success (true or false) and the response text
         """
-        ping_url = self._get_ping_url(uuid, slug, "/fail")
+        ping_url = self._get_ping_url_with_params(uuid, slug, "/fail", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
         return (True if response.status_code == 200 else False, response.text)
 
-    async def exit_code_ping(self, exit_code: int, uuid: str = "", slug: str = "", data: str = "") -> Tuple[bool, str]:
+    async def exit_code_ping(
+        self,
+        exit_code: int,
+        uuid: str = "",
+        slug: str = "",
+        data: str = "",
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
         """Signals to Healthchecks.io that the job has failed.
 
         Actively signaling a failure minimizes the delay from your monitored service failing to you receiving an alert.
@@ -487,6 +573,30 @@ class AsyncClient(AbstractClient):
         Returns:
             Tuple[bool, str]: success (true or false) and the response text
         """
-        ping_url = self._get_ping_url(uuid, slug, f"/{exit_code}")
+        ping_url = self._get_ping_url_with_params(uuid, slug, f"/{exit_code}", create=create, rid=rid)
+        response = self.check_ping_response(await self._client.post(ping_url, content=data))
+        return (True if response.status_code == 200 else False, response.text)
+
+    async def log_ping(
+        self,
+        uuid: str = "",
+        slug: str = "",
+        data: str = "",
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> Tuple[bool, str]:
+        """Sends a log payload to Healthchecks.io.
+
+        Args:
+            uuid (str): Check's UUID. Defaults to "".
+            slug (str): Check's Slug. Defaults to "".
+            data (str): Text data to append to this check. Defaults to ""
+            create (bool): Create a check if it does not exist (slug only). Defaults to False.
+            rid (Optional[str]): Run ID to associate with a started check. Defaults to None.
+
+        Returns:
+            Tuple[bool, str]: success (true or false) and the response text
+        """
+        ping_url = self._get_ping_url_with_params(uuid, slug, "/log", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
         return (True if response.status_code == 200 else False, response.text)

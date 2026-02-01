@@ -3,6 +3,8 @@
 https://healthchecks.io/docs/api/
 """
 
+import re
+
 from datetime import datetime
 from pathlib import PurePath
 from typing import Any
@@ -18,12 +20,50 @@ from pydantic import field_validator, BaseModel, ValidationInfo
 from pydantic import Field
 
 
+_ONCALENDAR_KEYWORDS = (
+    "minutely",
+    "hourly",
+    "daily",
+    "weekly",
+    "monthly",
+    "yearly",
+    "annually",
+    "quarterly",
+    "semiannually",
+    "semi-annual",
+    "semiannual",
+)
+
+
+def _looks_like_oncalendar(value: str) -> bool:
+    """Heuristic check for systemd OnCalendar expressions."""
+    value = value.strip()
+    if not value:
+        return False
+    lower = value.lower()
+    if any(re.search(rf"\b{keyword}\b", lower) for keyword in _ONCALENDAR_KEYWORDS):
+        return True
+    if re.search(r"\b(mon|tue|wed|thu|fri|sat|sun)\b", lower):
+        return True
+    if re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", lower):
+        return True
+    if ":" in value:
+        return True
+    if "*-*-*" in value:
+        return True
+    if re.search(r"\d{4}-\d{2}-\d{2}", value) or re.search(r"\d{2}-\d{2}", value):
+        return True
+    return False
+
+
 class Check(BaseModel):
     """Schema for a check object, either from a readonly api request or a rw api request."""
 
     unique_key: Optional[str] = None
     name: str
     slug: str
+    subject: Optional[str] = None
+    subject_fail: Optional[str] = None
     tags: Optional[str] = None
     desc: Optional[str] = None
     grace: int
@@ -33,10 +73,22 @@ class Check(BaseModel):
     next_ping: Optional[datetime] = None
     manual_resume: bool
     methods: Optional[str] = None
+    schedule: Optional[str] = None
+    tz: Optional[str] = None
+    started: Optional[bool] = None
+    start_kw: Optional[str] = None
+    success_kw: Optional[str] = None
+    failure_kw: Optional[str] = None
+    filter_subject: Optional[str] = None
+    filter_body: Optional[str] = None
+    filter_http_body: Optional[bool] = None
+    filter_default_fail: Optional[bool] = None
     # healthchecks.io's api doesn't return a scheme so we cant use Pydantic AnyUrl here
     ping_url: Optional[str] = None
     update_url: Optional[str] = None
     pause_url: Optional[str] = None
+    resume_url: Optional[str] = None
+    badge_url: Optional[str] = None
     channels: Optional[str] = None
     timeout: Optional[int] = None
     uuid: Optional[str] = Field(default=None, validate_default=True)
@@ -66,6 +118,10 @@ class CheckCreate(BaseModel):
     """Pydantic object for creating a check."""
 
     name: Optional[str] = Field("", description="Name of the check")
+    slug: Optional[str] = Field(
+        "",
+        description="Slug for the check. Can contain a-z, 0-9, hyphens, and underscores.",
+    )
     tags: Optional[str] = Field("", description="String separated list of tags to apply")
     desc: Optional[str] = Field("", description="Description of the check")
     timeout: Optional[int] = Field(
@@ -115,6 +171,42 @@ class CheckCreate(BaseModel):
         "To assign specific integrations, use a comma-separated list "
         "of integration UUIDs.",
     )
+    subject: Optional[str] = Field(
+        "",
+        description="Subject to use in email notifications (email integrations only).",
+    )
+    subject_fail: Optional[str] = Field(
+        "",
+        description="Subject to use in failure email notifications (email integrations only).",
+    )
+    start_kw: Optional[str] = Field(
+        "",
+        description="Keyword to look for in received email subject or body to indicate a check start.",
+    )
+    success_kw: Optional[str] = Field(
+        "",
+        description="Keyword to look for in received email subject or body to indicate success.",
+    )
+    failure_kw: Optional[str] = Field(
+        "",
+        description="Keyword to look for in received email subject or body to indicate failure.",
+    )
+    filter_subject: Optional[str] = Field(
+        "",
+        description="Regular expression to filter incoming email subject lines.",
+    )
+    filter_body: Optional[str] = Field(
+        "",
+        description="Regular expression to filter incoming email bodies.",
+    )
+    filter_http_body: Optional[bool] = Field(
+        False,
+        description="Check HTTP request body for keywords when sending a ping with a body.",
+    )
+    filter_default_fail: Optional[bool] = Field(
+        False,
+        description="Treat missing keywords as failures when filtering incoming emails.",
+    )
     unique: Optional[List[Optional[str]]] = Field(
         [],
         description="Enables upsert functionality. Before creating a check, "
@@ -123,8 +215,18 @@ class CheckCreate(BaseModel):
         "creates a new check and returns it with the HTTP status code 201 "
         "If Healthchecks.io finds a matching check, it updates the existing "
         "check and returns it with HTTP status code 200. The accepted values "
-        "for the unique field are name, tags, timeout, and grace.",
+        "for the unique field are name, slug, tags, timeout, and grace.",
     )
+
+    @field_validator("slug")
+    @classmethod
+    def validate_slug(cls, value: Optional[str]) -> Optional[str]:
+        """Validate slug format."""
+        if value is None or value == "":
+            return value
+        if not re.fullmatch(r"[a-z0-9_-]+", value):
+            raise ValueError("Slug can only contain lowercase a-z, 0-9, hyphens, and underscores")
+        return value
 
     @field_validator("schedule")
     @classmethod
@@ -132,8 +234,11 @@ class CheckCreate(BaseModel):
         """Validates that the schedule is a valid cron expression."""
         if value is None:
             return value
-        if not croniter.is_valid(value):
-            raise ValueError("Schedule is not a valid cron expression")
+        if croniter.is_valid(value):
+            return value
+        if _looks_like_oncalendar(value):
+            return value
+        raise ValueError("Schedule is not a valid cron or systemd OnCalendar expression")
         return value
 
     @field_validator("tz")
@@ -163,9 +268,9 @@ class CheckCreate(BaseModel):
         if value is None:
             return value
         for unique in value:
-            if unique not in ("name", "tags", "timeout", "grace"):
+            if unique not in ("name", "slug", "tags", "timeout", "grace"):
                 raise ValueError(
-                    "Unique is not valid. Unique can only be name, tags, timeout, and grace or an empty list"
+                    "Unique is not valid. Unique can only be name, slug, tags, timeout, and grace or an empty list"
                 )
         return value
 
@@ -174,6 +279,10 @@ class CheckUpdate(CheckCreate):
     """Pydantic object for updating a check."""
 
     name: Optional[str] = Field(None, description="Name of the check")
+    slug: Optional[str] = Field(
+        None,
+        description="Slug for the check. Can contain a-z, 0-9, hyphens, and underscores.",
+    )
     tags: Optional[str] = Field(None, description="String separated list of tags to apply")
     timeout: Optional[int] = Field(
         None,
@@ -222,6 +331,42 @@ class CheckUpdate(CheckCreate):
         "To assign specific integrations, use a comma-separated list "
         "of integration UUIDs.",
     )
+    subject: Optional[str] = Field(
+        None,
+        description="Subject to use in email notifications (email integrations only).",
+    )
+    subject_fail: Optional[str] = Field(
+        None,
+        description="Subject to use in failure email notifications (email integrations only).",
+    )
+    start_kw: Optional[str] = Field(
+        None,
+        description="Keyword to look for in received email subject or body to indicate a check start.",
+    )
+    success_kw: Optional[str] = Field(
+        None,
+        description="Keyword to look for in received email subject or body to indicate success.",
+    )
+    failure_kw: Optional[str] = Field(
+        None,
+        description="Keyword to look for in received email subject or body to indicate failure.",
+    )
+    filter_subject: Optional[str] = Field(
+        None,
+        description="Regular expression to filter incoming email subject lines.",
+    )
+    filter_body: Optional[str] = Field(
+        None,
+        description="Regular expression to filter incoming email bodies.",
+    )
+    filter_http_body: Optional[bool] = Field(
+        None,
+        description="Check HTTP request body for keywords when sending a ping with a body.",
+    )
+    filter_default_fail: Optional[bool] = Field(
+        None,
+        description="Treat missing keywords as failures when filtering incoming emails.",
+    )
     unique: Optional[List[Optional[str]]] = Field(
         None,
         description="Enables upsert functionality. Before creating a check, "
@@ -240,6 +385,8 @@ class CheckPings(BaseModel):
     type: str
     date: datetime
     number_of_pings: int
+    rid: Optional[str] = None
+    body_url: Optional[str] = None
     scheme: str
     remote_addr: str
     method: str

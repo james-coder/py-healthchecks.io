@@ -31,7 +31,7 @@ class AbstractClient(ABC):
         ping_key: str = "",
         api_url: str = "https://healthchecks.io/api/",
         ping_url: str = "https://hc-ping.com/",
-        api_version: int = 1,
+        api_version: int = 3,
     ) -> None:
         """An AbstractClient that other clients can implement.
 
@@ -40,7 +40,7 @@ class AbstractClient(ABC):
             ping_key (str): Healthchecks.io Ping key. Defaults to an empty string.
             api_url (str): API URL. Defaults to "https://healthchecks.io/api/".
             ping_url (str): Ping API url. Defaults to "https://hc-ping.com/".
-            api_version (int): Versiopn of the api to use. Defaults to 1.
+            api_version (int): Version of the api to use. Defaults to 3.
         """
         self._api_key = api_key
         self._ping_key = ping_key
@@ -96,6 +96,25 @@ class AbstractClient(ABC):
         if uuid != "":
             return self._get_ping_url_uuid(uuid, endpoint)
         return self._get_ping_url_slug(slug, endpoint)
+
+    def _get_ping_url_with_params(
+        self,
+        uuid: str,
+        slug: str,
+        endpoint: str,
+        create: bool = False,
+        rid: Optional[str] = None,
+    ) -> str:
+        """Get a ping url and append optional query parameters."""
+        ping_url = self._get_ping_url(uuid, slug, endpoint)
+        params: Dict[str, Union[str, int, bool]] = {}
+        if create:
+            params["create"] = 1
+        if rid:
+            params["rid"] = rid
+        if params:
+            ping_url = self._add_url_params(ping_url, params)
+        return ping_url
 
     def _get_ping_url_uuid(self, uuid: str, endpoint: str) -> str:
         """Get a ping url for a check with a uuid.
@@ -164,6 +183,9 @@ class AbstractClient(ABC):
 
         if response.status_code == 400:
             raise BadAPIRequestError(f"Bad request when requesting {response.request.url}. {response.text}")
+
+        if response.status_code == 409:
+            raise BadAPIRequestError(f"Conflict when requesting {response.request.url}. {response.text}")
 
         return response
 
