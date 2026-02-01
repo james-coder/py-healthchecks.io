@@ -20,42 +20,6 @@ from pydantic import field_validator, BaseModel, ValidationInfo
 from pydantic import Field
 
 
-_ONCALENDAR_KEYWORDS = (
-    "minutely",
-    "hourly",
-    "daily",
-    "weekly",
-    "monthly",
-    "yearly",
-    "annually",
-    "quarterly",
-    "semiannually",
-    "semi-annual",
-    "semiannual",
-)
-
-
-def _looks_like_oncalendar(value: str) -> bool:
-    """Heuristic check for systemd OnCalendar expressions."""
-    value = value.strip()
-    if not value:
-        return False
-    lower = value.lower()
-    if any(re.search(rf"\b{keyword}\b", lower) for keyword in _ONCALENDAR_KEYWORDS):
-        return True
-    if re.search(r"\b(mon|tue|wed|thu|fri|sat|sun)\b", lower):
-        return True
-    if re.search(r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b", lower):
-        return True
-    if ":" in value:
-        return True
-    if "*-*-*" in value:
-        return True
-    if re.search(r"\d{4}-\d{2}-\d{2}", value) or re.search(r"\d{2}-\d{2}", value):
-        return True
-    return False
-
-
 class Check(BaseModel):
     """Schema for a check object, either from a readonly api request or a rw api request."""
 
@@ -79,8 +43,8 @@ class Check(BaseModel):
     start_kw: Optional[str] = None
     success_kw: Optional[str] = None
     failure_kw: Optional[str] = None
-    filter_subject: Optional[str] = None
-    filter_body: Optional[str] = None
+    filter_subject: Optional[bool] = None
+    filter_body: Optional[bool] = None
     filter_http_body: Optional[bool] = None
     filter_default_fail: Optional[bool] = None
     # healthchecks.io's api doesn't return a scheme so we cant use Pydantic AnyUrl here
@@ -191,13 +155,13 @@ class CheckCreate(BaseModel):
         "",
         description="Keyword to look for in received email subject or body to indicate failure.",
     )
-    filter_subject: Optional[str] = Field(
-        "",
-        description="Regular expression to filter incoming email subject lines.",
+    filter_subject: Optional[bool] = Field(
+        False,
+        description="Check incoming email subject lines for keywords.",
     )
-    filter_body: Optional[str] = Field(
-        "",
-        description="Regular expression to filter incoming email bodies.",
+    filter_body: Optional[bool] = Field(
+        False,
+        description="Check incoming email bodies for keywords.",
     )
     filter_http_body: Optional[bool] = Field(
         False,
@@ -231,14 +195,14 @@ class CheckCreate(BaseModel):
     @field_validator("schedule")
     @classmethod
     def validate_schedule(cls, value: Optional[str]) -> Optional[str]:
-        """Validates that the schedule is a valid cron expression."""
+        """Validates that the schedule is non-empty and allows cron or OnCalendar strings."""
         if value is None:
             return value
+        value = value.strip()
+        if value == "":
+            raise ValueError("Schedule cannot be empty")
         if croniter.is_valid(value):
             return value
-        if _looks_like_oncalendar(value):
-            return value
-        raise ValueError("Schedule is not a valid cron or systemd OnCalendar expression")
         return value
 
     @field_validator("tz")
@@ -351,13 +315,13 @@ class CheckUpdate(CheckCreate):
         None,
         description="Keyword to look for in received email subject or body to indicate failure.",
     )
-    filter_subject: Optional[str] = Field(
+    filter_subject: Optional[bool] = Field(
         None,
-        description="Regular expression to filter incoming email subject lines.",
+        description="Check incoming email subject lines for keywords.",
     )
-    filter_body: Optional[str] = Field(
+    filter_body: Optional[bool] = Field(
         None,
-        description="Regular expression to filter incoming email bodies.",
+        description="Check incoming email bodies for keywords.",
     )
     filter_http_body: Optional[bool] = Field(
         None,

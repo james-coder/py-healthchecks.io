@@ -344,9 +344,9 @@ async def test_asuccess_ping(respx_mock, test_async_client, url, ping_method, me
 @pytest.mark.asyncio
 @pytest.mark.respx
 async def test_asuccess_ping_with_params(respx_mock, test_async_client):
-    channels_url = urljoin(test_async_client._ping_url, "test")
+    channels_url = urljoin(test_async_client._ping_url, "1234/test")
     respx_mock.post(f"{channels_url}?create=1&rid=run123").mock(return_value=Response(status_code=200, text="OK"))
-    result, text = await test_async_client.success_ping(uuid="test", create=True, rid="run123")
+    result, text = await test_async_client.success_ping(slug="test", create=True, rid="run123")
     assert result is True
     assert text == "OK"
 
@@ -359,3 +359,19 @@ async def test_alog_ping(respx_mock, test_async_client):
     result, text = await test_async_client.log_ping(uuid="test", data="log line")
     assert result is True
     assert text == "OK"
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_asuccess_ping_created_returns_true(respx_mock, test_async_client):
+    channels_url = urljoin(test_async_client._ping_url, "1234/test")
+    respx_mock.post(channels_url).mock(return_value=Response(status_code=201, text="Created"))
+    result, text = await test_async_client.success_ping(slug="test")
+    assert result is True
+    assert text == "Created"
+
+
+@pytest.mark.asyncio
+async def test_asuccess_ping_create_requires_slug(test_async_client):
+    with pytest.raises(BadAPIRequestError):
+        await test_async_client.success_ping(uuid="test", create=True)

@@ -319,9 +319,9 @@ def test_success_ping(respx_mock, test_client, url, ping_method, method_kwargs):
 
 @pytest.mark.respx
 def test_success_ping_with_params(respx_mock, test_client):
-    channels_url = urljoin(test_client._ping_url, "test")
+    channels_url = urljoin(test_client._ping_url, "1234/test")
     respx_mock.post(f"{channels_url}?create=1&rid=run123").mock(return_value=Response(status_code=200, text="OK"))
-    result, text = test_client.success_ping(uuid="test", create=True, rid="run123")
+    result, text = test_client.success_ping(slug="test", create=True, rid="run123")
     assert result is True
     assert text == "OK"
 
@@ -333,3 +333,17 @@ def test_log_ping(respx_mock, test_client):
     result, text = test_client.log_ping(uuid="test", data="log line")
     assert result is True
     assert text == "OK"
+
+
+@pytest.mark.respx
+def test_success_ping_created_returns_true(respx_mock, test_client):
+    channels_url = urljoin(test_client._ping_url, "1234/test")
+    respx_mock.post(channels_url).mock(return_value=Response(status_code=201, text="Created"))
+    result, text = test_client.success_ping(slug="test")
+    assert result is True
+    assert text == "Created"
+
+
+def test_success_ping_create_requires_slug(test_client):
+    with pytest.raises(BadAPIRequestError):
+        test_client.success_ping(uuid="test", create=True)

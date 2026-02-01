@@ -37,7 +37,7 @@ def test_check_create_validators():
 
     # test validate_schedule
     with pytest.raises(ValidationError):
-        check_create = checks.CheckCreate(name="Test", tags="", desc="Test", schedule="no good")
+        check_create = checks.CheckCreate(name="Test", tags="", desc="Test", schedule="")
 
     # test validate_tz
     with pytest.raises(ValidationError):

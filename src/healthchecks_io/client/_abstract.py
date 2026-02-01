@@ -106,6 +106,8 @@ class AbstractClient(ABC):
         rid: Optional[str] = None,
     ) -> str:
         """Get a ping url and append optional query parameters."""
+        if create and uuid != "":
+            raise BadAPIRequestError("Create is only supported when pinging by slug")
         ping_url = self._get_ping_url(uuid, slug, endpoint)
         params: Dict[str, Union[str, int, bool]] = {}
         if create:

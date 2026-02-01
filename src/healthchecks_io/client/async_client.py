@@ -448,7 +448,7 @@ class AsyncClient(AbstractClient):
         """
         ping_url = self._get_ping_url_with_params(uuid, slug, "", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
-        return (True if response.status_code == 200 else False, response.text)
+        return (response.status_code in (200, 201), response.text)
 
     async def start_ping(
         self,
@@ -491,7 +491,7 @@ class AsyncClient(AbstractClient):
         """
         ping_url = self._get_ping_url_with_params(uuid, slug, "/start", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
-        return (True if response.status_code == 200 else False, response.text)
+        return (response.status_code in (200, 201), response.text)
 
     async def fail_ping(
         self,
@@ -532,7 +532,7 @@ class AsyncClient(AbstractClient):
         """
         ping_url = self._get_ping_url_with_params(uuid, slug, "/fail", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
-        return (True if response.status_code == 200 else False, response.text)
+        return (response.status_code in (200, 201), response.text)
 
     async def exit_code_ping(
         self,
@@ -575,7 +575,7 @@ class AsyncClient(AbstractClient):
         """
         ping_url = self._get_ping_url_with_params(uuid, slug, f"/{exit_code}", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
-        return (True if response.status_code == 200 else False, response.text)
+        return (response.status_code in (200, 201), response.text)
 
     async def log_ping(
         self,
@@ -599,4 +599,4 @@ class AsyncClient(AbstractClient):
         """
         ping_url = self._get_ping_url_with_params(uuid, slug, "/log", create=create, rid=rid)
         response = self.check_ping_response(await self._client.post(ping_url, content=data))
-        return (True if response.status_code == 200 else False, response.text)
+        return (response.status_code in (200, 201), response.text)
