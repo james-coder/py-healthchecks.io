@@ -399,15 +399,18 @@ class AsyncClient(AbstractClient):
         response = self.check_response(await self._client.get(request_url))
         return {key: Badges.from_api_result(item) for key, item in response.json()["badges"].items()}
 
-    async def get_status(self) -> Dict[str, str]:
+    async def get_status(self) -> Dict[str, str] | str:
         """Returns Healthchecks.io API status information.
 
         Returns:
-            Dict[str, str]: status information
+            Dict[str, str] | str: status information (JSON if provided, otherwise plain text)
         """
         request_url = self._get_api_request_url("status/")
         response = self.check_response(await self._client.get(request_url))
-        return response.json()
+        content_type = response.headers.get("content-type", "")
+        if "application/json" in content_type:
+            return response.json()
+        return response.text
 
     async def success_ping(
         self,

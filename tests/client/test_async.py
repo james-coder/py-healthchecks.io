@@ -317,6 +317,17 @@ async def test_aget_status(respx_mock, test_async_client):
     assert status["status"] == "ok"
 
 
+@pytest.mark.asyncio
+@pytest.mark.respx
+async def test_aget_status_text(respx_mock, test_async_client):
+    status_url = urljoin(test_async_client._api_url, "status/")
+    respx_mock.get(status_url).mock(
+        return_value=Response(status_code=200, text="OK", headers={"content-type": "text/plain"})
+    )
+    status = await test_async_client.get_status()
+    assert status == "OK"
+
+
 ping_test_parameters = [
     ("test", "success_ping", {"uuid": "test"}),
     ("1234/test", "success_ping", {"slug": "test"}),

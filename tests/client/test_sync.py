@@ -294,6 +294,16 @@ def test_get_status(respx_mock, test_client):
     assert status["status"] == "ok"
 
 
+@pytest.mark.respx
+def test_get_status_text(respx_mock, test_client):
+    status_url = urljoin(test_client._api_url, "status/")
+    respx_mock.get(status_url).mock(
+        return_value=Response(status_code=200, text="OK", headers={"content-type": "text/plain"})
+    )
+    status = test_client.get_status()
+    assert status == "OK"
+
+
 ping_test_parameters = [
     ("test", "success_ping", {"uuid": "test"}),
     ("1234/test", "success_ping", {"slug": "test"}),
