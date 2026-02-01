@@ -74,7 +74,32 @@ class AsyncClient(AbstractClient):
 
     def _finalizer_method(self) -> None:
         """Calls _afinalizer_method from a sync context to work with weakref.finalizer."""
-        asyncio.run(self._afinalizer_method())
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop in this thread; best effort close.
+            try:
+                asyncio.run(self._afinalizer_method())
+            except RuntimeError:
+                # Likely during interpreter shutdown or loop issues; swallow in finalizer.
+                pass
+            return
+
+        if loop.is_closed():
+            try:
+                asyncio.run(self._afinalizer_method())
+            except RuntimeError:
+                pass
+            return
+
+        try:
+            loop.create_task(self._afinalizer_method())
+        except RuntimeError:
+            # Loop state changed between checks; fall back to best-effort close.
+            try:
+                asyncio.run(self._afinalizer_method())
+            except RuntimeError:
+                pass
 
     async def _afinalizer_method(self) -> None:
         """Finalizer coroutine that closes our client connections."""
@@ -94,7 +119,8 @@ class AsyncClient(AbstractClient):
             Check: check that was just created
         """
         request_url = self._get_api_request_url("checks/")
-        response = self.check_response(await self._client.post(request_url, json=new_check.dict(exclude_none=True)))
+        payload = self._model_dump(new_check, exclude_none=True)
+        response = self.check_response(await self._client.post(request_url, json=payload))
         return Check.from_api_result(response.json())
 
     async def update_check(self, uuid: str, update_check: CheckCreate) -> Check:
@@ -114,7 +140,7 @@ class AsyncClient(AbstractClient):
         response = self.check_response(
             await self._client.post(
                 request_url,
-                json=update_check.dict(exclude_unset=True, exclude_none=True),
+                json=self._model_dump(update_check, exclude_unset=True, exclude_none=True),
             )
         )
         return Check.from_api_result(response.json())

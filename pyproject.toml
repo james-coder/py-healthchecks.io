@@ -63,6 +63,7 @@ tests = ["tests", "*/tests"]
 [tool.coverage.run]
 branch = true
 source = ["healthchecks_io"]
+disable_warnings = ["module-not-measured"]
 
 [tool.coverage.report]
 show_missing = true

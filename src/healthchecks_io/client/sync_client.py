@@ -133,7 +133,8 @@ class Client(AbstractClient):
             Check: check that was just created
         """
         request_url = self._get_api_request_url("checks/")
-        response = self.check_response(self._client.post(request_url, json=new_check.dict(exclude_none=True)))
+        payload = self._model_dump(new_check, exclude_none=True)
+        response = self.check_response(self._client.post(request_url, json=payload))
         return Check.from_api_result(response.json())
 
     def update_check(self, uuid: str, update_check: CheckCreate) -> Check:
@@ -159,7 +160,7 @@ class Client(AbstractClient):
         response = self.check_response(
             self._client.post(
                 request_url,
-                json=update_check.dict(exclude_unset=True, exclude_none=True),
+                json=self._model_dump(update_check, exclude_unset=True, exclude_none=True),
             )
         )
         return Check.from_api_result(response.json())

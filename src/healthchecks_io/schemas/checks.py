@@ -71,14 +71,14 @@ class CheckCreate(BaseModel):
     timeout: Optional[int] = Field(
         86400,
         description="The expected period of this check in seconds.",
-        gte=60,
-        lte=31536000,
+        ge=60,
+        le=31536000,
     )
     grace: Optional[int] = Field(
         3600,
         description="The grace period for this check in seconds.",
-        gte=60,
-        lte=31536000,
+        ge=60,
+        le=31536000,
     )
     schedule: Optional[str] = Field(
         None,
@@ -128,32 +128,40 @@ class CheckCreate(BaseModel):
 
     @field_validator("schedule")
     @classmethod
-    def validate_schedule(cls, value: str) -> str:
+    def validate_schedule(cls, value: Optional[str]) -> Optional[str]:
         """Validates that the schedule is a valid cron expression."""
+        if value is None:
+            return value
         if not croniter.is_valid(value):
             raise ValueError("Schedule is not a valid cron expression")
         return value
 
     @field_validator("tz")
     @classmethod
-    def validate_tz(cls, value: str) -> str:
+    def validate_tz(cls, value: Optional[str]) -> Optional[str]:
         """Validates that the timezone is a valid timezone string."""
+        if value is None:
+            return value
         if value not in pytz.all_timezones:
             raise ValueError("Tz is not a valid timezone")
         return value
 
     @field_validator("methods")
     @classmethod
-    def validate_methods(cls, value: str) -> str:
+    def validate_methods(cls, value: Optional[str]) -> Optional[str]:
         """Validate that methods."""
+        if value is None:
+            return value
         if value not in ("", "POST"):
             raise ValueError("Methods is invalid, it should be either an empty string or POST")
         return value
 
     @field_validator("unique")
     @classmethod
-    def validate_unique(cls, value: List[Optional[str]]) -> List[Optional[str]]:
+    def validate_unique(cls, value: Optional[List[Optional[str]]]) -> Optional[List[Optional[str]]]:
         """Validate unique list."""
+        if value is None:
+            return value
         for unique in value:
             if unique not in ("name", "tags", "timeout", "grace"):
                 raise ValueError(
@@ -170,14 +178,14 @@ class CheckUpdate(CheckCreate):
     timeout: Optional[int] = Field(
         None,
         description="The expected period of this check in seconds.",
-        gte=60,
-        lte=31536000,
+        ge=60,
+        le=31536000,
     )
     grace: Optional[int] = Field(
         None,
         description="The grace period for this check in seconds.",
-        gte=60,
-        lte=31536000,
+        ge=60,
+        le=31536000,
     )
     schedule: Optional[str] = Field(
         None,

@@ -52,6 +52,22 @@ def test_check_create_validators():
         check_create = checks.CheckCreate(name="Test", tags="", desc="Test", unique=["no good"])
 
 
+def test_check_create_allows_none_optionals():
+    check_create = checks.CheckCreate(schedule=None, tz=None, methods=None, unique=None)
+    assert check_create.schedule is None
+    assert check_create.tz is None
+    assert check_create.methods is None
+    assert check_create.unique is None
+
+
+def test_check_update_allows_none_optionals():
+    check_update = checks.CheckUpdate(schedule=None, tz=None, methods=None, unique=None)
+    assert check_update.schedule is None
+    assert check_update.tz is None
+    assert check_update.methods is None
+    assert check_update.unique is None
+
+
 def test_check_pings_from_api():
     ping = {
         "type": "success",

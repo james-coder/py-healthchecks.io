@@ -267,3 +267,10 @@ class AbstractClient(ABC):
         ).geturl()
 
         return new_url
+
+    @staticmethod
+    def _model_dump(model: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Compatibility wrapper for Pydantic v1/v2 model serialization."""
+        if hasattr(model, "model_dump"):
+            return model.model_dump(**kwargs)  # type: ignore[no-any-return]
+        return model.dict(**kwargs)

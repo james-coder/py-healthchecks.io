@@ -157,7 +157,6 @@ async def test_aget_checks_tags(fake_check_api_result, respx_mock, test_async_cl
     assert checks[0].name == fake_check_api_result["name"]
 
 
-@pytest.mark.asyncio
 def test_finalizer_closes(test_async_client):
     """Tests our finalizer works to close the method"""
     assert not test_async_client.is_closed

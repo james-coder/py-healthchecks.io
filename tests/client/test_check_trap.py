@@ -39,6 +39,41 @@ def test_check_trap_sync_exception(respx_mock, test_client):
             raise Exception("Exception")
 
 
+@pytest.mark.respx
+def test_check_trap_sync_exception_redacts_message_by_default(respx_mock, test_client):
+    start_url = urljoin(test_client._ping_url, "test/start")
+    respx_mock.post(start_url).mock(return_value=Response(status_code=200, text="OK"))
+    fail_url = urljoin(test_client._ping_url, "test/fail")
+    respx_mock.post(fail_url).mock(return_value=Response(status_code=200, text="OK"))
+
+    with pytest.raises(Exception):
+        with CheckTrap(test_client, uuid="test"):
+            raise Exception("secret")
+
+    body = respx_mock.calls[-1].request.content
+    if isinstance(body, bytes):
+        body = body.decode()
+    assert "Exception" in body
+    assert "secret" not in body
+
+
+@pytest.mark.respx
+def test_check_trap_sync_exception_allows_message_when_enabled(respx_mock, test_client):
+    start_url = urljoin(test_client._ping_url, "test/start")
+    respx_mock.post(start_url).mock(return_value=Response(status_code=200, text="OK"))
+    fail_url = urljoin(test_client._ping_url, "test/fail")
+    respx_mock.post(fail_url).mock(return_value=Response(status_code=200, text="OK"))
+
+    with pytest.raises(Exception):
+        with CheckTrap(test_client, uuid="test", include_exception_message=True):
+            raise Exception("secret")
+
+    body = respx_mock.calls[-1].request.content
+    if isinstance(body, bytes):
+        body = body.decode()
+    assert "secret" in body
+
+
 @pytest.mark.asyncio
 @pytest.mark.respx
 async def test_check_trap_async(respx_mock, test_async_client):

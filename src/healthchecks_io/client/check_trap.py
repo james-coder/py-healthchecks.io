@@ -1,5 +1,6 @@
 """CheckTrap is a context manager to wrap around python code to communicate results to a Healthchecks check."""
 
+import traceback as tb
 from types import TracebackType
 from typing import List
 from typing import Optional
@@ -21,6 +22,9 @@ class CheckTrap:
         uuid: str = "",
         slug: str = "",
         suppress_exceptions: bool = False,
+        log_exceptions: bool = True,
+        include_exception_message: bool = False,
+        include_traceback: bool = False,
     ) -> None:
         """A context manager to wrap around python code to communicate results to a Healthchecks check.
 
@@ -29,6 +33,9 @@ class CheckTrap:
             uuid (str): uuid of the check. Defaults to "".
             slug (str): slug of the check, exclusion wiht uuid. Defaults to "".
             suppress_exceptions (bool): If true, do not raise any exceptions. Defaults to False.
+            log_exceptions (bool): If true, add exception info to logs on failure. Defaults to True.
+            include_exception_message (bool): If true, include the exception message. Defaults to False.
+            include_traceback (bool): If true, include a formatted traceback. Defaults to False.
 
         Raises:
             Exception: Raised if a slug and a uuid is passed
@@ -40,6 +47,9 @@ class CheckTrap:
         self.slug: str = slug
         self.log_lines: List[str] = list()
         self.suppress_exceptions: bool = suppress_exceptions
+        self.log_exceptions: bool = log_exceptions
+        self.include_exception_message: bool = include_exception_message
+        self.include_traceback: bool = include_traceback
 
     def add_log(self, line: str) -> None:
         """Add a line to the context manager's log that is sent with the check.
@@ -97,8 +107,13 @@ class CheckTrap:
         if exc_type is None:
             self.client.success_ping(self.uuid, self.slug, data="\n".join(self.log_lines))
         else:
-            self.add_log(str(exc))
-            self.add_log(str(traceback))
+            if self.log_exceptions:
+                self.add_log(exc_type.__name__)
+                if self.include_exception_message and exc is not None:
+                    self.add_log(str(exc))
+                if self.include_traceback and traceback is not None:
+                    for line in tb.format_tb(traceback):
+                        self.add_log(line.rstrip("\n"))
             self.client.fail_ping(self.uuid, self.slug, data="\n".join(self.log_lines))
         return self.suppress_exceptions
 
@@ -153,8 +168,13 @@ class CheckTrap:
                 self.uuid, self.slug, data="\n".join(self.log_lines)
             )
         else:
-            self.add_log(str(exc))
-            self.add_log(str(traceback))
+            if self.log_exceptions:
+                self.add_log(exc_type.__name__)
+                if self.include_exception_message and exc is not None:
+                    self.add_log(str(exc))
+                if self.include_traceback and traceback is not None:
+                    for line in tb.format_tb(traceback):
+                        self.add_log(line.rstrip("\n"))
             await self.client.fail_ping(  # type: ignore
                 self.uuid, self.slug, data="\n".join(self.log_lines)
             )
